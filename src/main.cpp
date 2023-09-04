@@ -67,10 +67,6 @@ String& MQTT_TOPIC = data[0];
 
 
 
-
-
-
-
 void setup() {
   Serial.begin(115200);
   loadData(data,DATA_SIZE);
