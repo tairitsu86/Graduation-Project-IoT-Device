@@ -3,6 +3,7 @@ extern "C" {
   #include "freertos/timers.h"
 }
 #include "WiFi.h"
+#include "BluetoothConnector.h"
 
 TimerHandle_t wifiReconnectTimer;
 String* wifiSsidPtr;
@@ -16,16 +17,18 @@ void setWifiConfig(String* wifiSsidPtr,String* wifiPasswordPtr){
 void connectToWifi(){
   WiFi.begin(*wifiSsidPtr, *wifiPasswordPtr);
   Serial.print(F("Try to connect to "));
-  Serial.print(*wifiSsidPtr);
+  Serial.println(*wifiSsidPtr);
 }
 
 void wifiEvent(WiFiEvent_t event) {
-  Serial.printf("[WiFi-event] event: %dn", event);
+  Serial.printf("[WiFi-event] event: %dn\n", event);
   switch(event) {
     case SYSTEM_EVENT_STA_GOT_IP:
-      Serial.println("WiFi connected");
+      Serial.println("WiFi connected.");
       Serial.println("IP address: ");
       Serial.println(WiFi.localIP());
+      serialBTSender("WiFi connected.");
+      xTimerStop(wifiReconnectTimer, 0);
       break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
       Serial.println("WiFi lost connection");

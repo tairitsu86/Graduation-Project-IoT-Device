@@ -1,10 +1,16 @@
 #include <BluetoothSerial.h> 
 BluetoothSerial SerialBT;
 
-void bluetoothOn(String name){
+String* bluetoothNamePtr;
+
+void setBluetoothConfig(String* bluetoothNamePtr){
+    ::bluetoothNamePtr = bluetoothNamePtr;
+}
+
+void bluetoothOn(){
     Serial.print(F("Turn on bluetooth with name: "));
-    Serial.println(name);
-    SerialBT.begin(name);
+    Serial.println(*bluetoothNamePtr);
+    SerialBT.begin(*bluetoothNamePtr);
 }
 
 void bluetoothOff(){

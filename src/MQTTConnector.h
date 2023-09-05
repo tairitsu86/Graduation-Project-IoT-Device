@@ -1,5 +1,7 @@
 #include "WiFiConnector.h"
+#include "JsonDecoder.h"
 #include <AsyncMqttClient.h>
+#define INIT_ACCOUNT_TOPIC "device/account"
 
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
@@ -9,6 +11,8 @@ String* mqttPortPtr;
 String* mqttUsernamePtr;
 String* mqttPasswordPtr;
 String* mqttTopic;
+bool isInit = false;
+
 
 void setMqttConfig(String* mqttHostPtr,String* mqttPortPtr,String* mqttUsernamePtr,String* mqttPasswordPtr,String* mqttTopic){
   ::mqttHostPtr = mqttHostPtr;
@@ -30,23 +34,8 @@ void setMqttTopic(){
   TOPIC_HEARTBEAT = *mqttTopic+"/heartbeat";
 }
 
-void connectToMqtt() {
-  if(!WiFi.isConnected()){
-    Serial.println("WiFi connect fail, skip connect mqtt step.");
-    return;
-  }
-  mqttClient.setServer(mqttHostPtr->c_str(), mqttPortPtr->toInt());
-  mqttClient.setCredentials(mqttUsernamePtr->c_str(), mqttPasswordPtr->c_str());
-  Serial.println("Connecting to MQTT...");
-  mqttClient.connect();
-}
-
-
-void onMqttConnect(bool sessionPresent) {
-  Serial.println("Connected to MQTT.");
-  Serial.print("Session present: ");
-  Serial.println(sessionPresent);
-  
+void subscribeTopic(){
+  setMqttTopic();
   uint16_t packetIdSub;
 
   packetIdSub = mqttClient.subscribe(TOPIC_INFO.c_str(), 2);
@@ -63,6 +52,42 @@ void onMqttConnect(bool sessionPresent) {
   Serial.println(packetIdSub);
 }
 
+void mqttInitializationDataSetter(String json){
+  String data[] = {"username","password"};
+  jsonDecode(json,data,2);
+  *mqttUsernamePtr = data[0];
+  *mqttPasswordPtr = data[1];
+  Serial.println(data[0]);
+  Serial.println(data[1]);
+  isInit = false;
+  mqttClient.setCredentials(mqttUsernamePtr->c_str(), mqttPasswordPtr->c_str());
+  mqttClient.disconnect();
+}
+
+void connectToMqtt() {
+  if(!WiFi.isConnected()){
+    Serial.println("WiFi connect fail, skip connect mqtt step.");
+    return;
+  }
+  Serial.println("Connecting to MQTT...");
+  mqttClient.connect();
+}
+
+
+void onMqttConnect(bool sessionPresent) {
+  Serial.println("MQTT connected.");
+  serialBTSender("MQTT connected.");
+  Serial.print("Session present: ");
+  Serial.println(sessionPresent);
+  xTimerStop(mqttReconnectTimer, 0);
+  if(isInit){
+    Serial.println(mqttClient.subscribe(INIT_ACCOUNT_TOPIC, 2));
+    return;
+  } 
+  subscribeTopic();
+}
+
+
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   Serial.println("Disconnected from MQTT.");
@@ -76,6 +101,7 @@ void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
   Serial.print("  qos: ");
   Serial.println(qos);
 }
+
 void onMqttUnsubscribe(uint16_t packetId) {
   Serial.println("Unsubscribe acknowledged.");
   Serial.print("  packetId: ");
@@ -91,8 +117,13 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   for (int i = 0; i < len; i++) {
     messageTemp += (char)payload[i];
   }
-    Serial.print("Message: ");
-    Serial.println(messageTemp);
+  Serial.print("Message: ");
+  Serial.println(messageTemp);
+  Serial.println(String(topic) == INIT_ACCOUNT_TOPIC);
+  if(String(topic) == INIT_ACCOUNT_TOPIC){
+    Serial.print("Start set data.");
+    mqttInitializationDataSetter(messageTemp);
+  }
 }
 
 void publishMessage(String topic,String message){
@@ -103,6 +134,7 @@ void publishMessage(String topic,String message){
 }
 
 void mqttStart(){
+  mqttClient.setServer(mqttHostPtr->c_str(), mqttPortPtr->toInt());
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
 
   mqttClient.onConnect(onMqttConnect);
@@ -110,6 +142,15 @@ void mqttStart(){
   mqttClient.onSubscribe(onMqttSubscribe);
   mqttClient.onUnsubscribe(onMqttUnsubscribe);
   mqttClient.onMessage(onMqttMessage);
-  connectToMqtt();
+  xTimerStart(mqttReconnectTimer, 0);
 }
+
+void mqttInitialization(){
+  isInit = true;
+  Serial.println("Init MQTT...");
+  mqttClient.setCredentials("", "");
+  mqttStart();
+}
+
+
 

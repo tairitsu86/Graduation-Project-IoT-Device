@@ -1,7 +1,6 @@
 #include "MQTTConnector.h"
-#include "BluetoothConnector.h"
 #include "DataStorage.h"
-#include "HttpRequest.h"
+
 
 using namespace std;
 
@@ -59,9 +58,17 @@ void bluetoothListener(){
         MQTT_PORT = subfix;
         result = subfix;
         saveData(data,DATA_SIZE);
-      }else if(prefix == "CONNECT_START"){
-        connectToWifi();
-        result = "Try to connect WiFi.";
+      }else if(prefix == "CONNECT_WIFI_"){
+        wifiStart();
+        result = "Try to connect to wifi.";
+      }else if(prefix == "CONNECT_MQTT_"){
+        mqttStart();
+        result = "Try to connect to mqtt.";
+      }else if(prefix == "MQTT_INIT____"){
+        mqttInitialization();
+        result = "Try to init mqtt setting.";
+      }else if(prefix == "BLUETOOTH_OFF"){
+        bluetoothOff();
       }
       Serial.println(result);
       serialBTSender(result);
@@ -76,10 +83,13 @@ void bluetoothListener(){
 void setup() {
   Serial.begin(115200);
   loadData(data,DATA_SIZE);
+  setBluetoothConfig(&DEVICE_NAME);
   setWifiConfig(&WIFI_SSID, &WIFI_PASSWORD);
   setMqttConfig(&MQTT_HOST, &MQTT_PORT, &MQTT_USERNAME, &MQTT_PASSWORD, &MQTT_TOPIC);
-  if(DEVICE_ID = "UNKNOWN"){
-    bluetoothOn(DEVICE_NAME);
+  bluetoothOn();
+  if(DEVICE_ID != "UNKNOWN"){
+    wifiStart();
+    mqttStart();
   }
 }
 
