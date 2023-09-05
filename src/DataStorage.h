@@ -15,7 +15,8 @@ void loadData(String data[], int size) {
       j++;
     }
     if(j==EEPROM_SIZE){
-      data[0] = "NEW_ESP32_DEVICE";
+      data[0] = "UNKNOWN";
+      data[1] = "NEW_ESP32_DEVICE";
       break;
     }
   }

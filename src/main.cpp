@@ -1,11 +1,12 @@
-#include "WiFiConnector.h"
+#include "MQTTConnector.h"
 #include "BluetoothConnector.h"
 #include "DataStorage.h"
+#include "HttpRequest.h"
 
 using namespace std;
 
 //EEPROM data store
-#define DATA_SIZE 9
+#define DATA_SIZE 8
 String data[DATA_SIZE];
 
 
@@ -18,6 +19,15 @@ String& OWNER = data[2];
 //WIFI connect
 String& WIFI_SSID = data[3];
 String& WIFI_PASSWORD = data[4];
+
+
+//MQTT connect
+String& MQTT_HOST = data[5];
+String& MQTT_PORT = data[6];
+String& MQTT_USERNAME = data[0];
+String& MQTT_PASSWORD = data[7];
+String& MQTT_TOPIC = data[0];
+
 
 
 //Bluetooth connect
@@ -34,7 +44,7 @@ void bluetoothListener(){
         result = subfix;
         saveData(data,DATA_SIZE);
       }else if(prefix == "WIFI_SSID____"){
-        WIFI_SSID= subfix;
+        WIFI_SSID = subfix;
         result = subfix;
         saveData(data,DATA_SIZE);
       }else if(prefix == "WIFI_PASSWORD"){
@@ -42,15 +52,15 @@ void bluetoothListener(){
         result = subfix;
         saveData(data,DATA_SIZE);
       }else if(prefix == "MQTT_HOST____"){
-        WIFI_PASSWORD = subfix;
+        MQTT_HOST = subfix;
         result = subfix;
         saveData(data,DATA_SIZE);
       }else if(prefix == "MQTT_PORT____"){
-        WIFI_PASSWORD = subfix;
+        MQTT_PORT = subfix;
         result = subfix;
         saveData(data,DATA_SIZE);
       }else if(prefix == "CONNECT_START"){
-        wifiConnect(WIFI_SSID,WIFI_PASSWORD)
+        connectToWifi();
         result = "Try to connect WiFi.";
       }
       Serial.println(result);
@@ -58,18 +68,19 @@ void bluetoothListener(){
     }
   }
 }
-//MQTT connect
-String& MQTT_HOST = data[5];
-String& MQTT_PORT = data[6];
-String& MQTT_USERNAME = data[0];
-String& MQTT_PASSWORD = data[8];
-String& MQTT_TOPIC = data[0];
+
+
 
 
 
 void setup() {
   Serial.begin(115200);
   loadData(data,DATA_SIZE);
+  setWifiConfig(&WIFI_SSID, &WIFI_PASSWORD);
+  setMqttConfig(&MQTT_HOST, &MQTT_PORT, &MQTT_USERNAME, &MQTT_PASSWORD, &MQTT_TOPIC);
+  if(DEVICE_ID = "UNKNOWN"){
+    bluetoothOn(DEVICE_NAME);
+  }
 }
 
 void loop() {
