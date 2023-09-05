@@ -1,10 +1,11 @@
 #include "WiFiConnector.h"
 #include "JsonDecoder.h"
 #include <AsyncMqttClient.h>
-#define INIT_ACCOUNT_TOPIC "device/account"
+#define INIT_ACCOUNT_TOPIC "newAccount"
 
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
+TimerHandle_t mqttHeartbeatTimer;
 
 String* mqttHostPtr;
 String* mqttPortPtr;
@@ -12,7 +13,7 @@ String* mqttUsernamePtr;
 String* mqttPasswordPtr;
 String* mqttTopic;
 bool isInit = false;
-
+bool mqttReady = false;
 
 void setMqttConfig(String* mqttHostPtr,String* mqttPortPtr,String* mqttUsernamePtr,String* mqttPasswordPtr,String* mqttTopic){
   ::mqttHostPtr = mqttHostPtr;
@@ -28,10 +29,10 @@ String TOPIC_CONTROL;
 String TOPIC_HEARTBEAT;
 
 void setMqttTopic(){
-  TOPIC_INFO = *mqttTopic+"/info";
-  TOPIC_STATE = *mqttTopic+"/state";
-  TOPIC_CONTROL = *mqttTopic+"/control";
-  TOPIC_HEARTBEAT = *mqttTopic+"/heartbeat";
+  TOPIC_INFO = "devices/"+*mqttTopic+"/info";
+  TOPIC_STATE = "devices/"+*mqttTopic+"/state";
+  TOPIC_CONTROL = "devices/"+*mqttTopic+"/control";
+  TOPIC_HEARTBEAT = "devices/"+*mqttTopic+"/heartbeat";
 }
 
 void subscribeTopic(){
@@ -61,6 +62,7 @@ void mqttInitializationDataSetter(String json){
   Serial.println(data[1]);
   isInit = false;
   mqttClient.setCredentials(mqttUsernamePtr->c_str(), mqttPasswordPtr->c_str());
+  mqttClient.unsubscribe(INIT_ACCOUNT_TOPIC);
   mqttClient.disconnect();
 }
 
@@ -71,6 +73,7 @@ void connectToMqtt() {
   }
   Serial.println("Connecting to MQTT...");
   mqttClient.connect();
+  
 }
 
 
@@ -83,14 +86,18 @@ void onMqttConnect(bool sessionPresent) {
   if(isInit){
     Serial.println(mqttClient.subscribe(INIT_ACCOUNT_TOPIC, 2));
     return;
-  } 
+  }
   subscribeTopic();
+  xTimerStart(mqttHeartbeatTimer, 0);
+  mqttReady = true;
+
 }
 
 
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   Serial.println("Disconnected from MQTT.");
+  mqttReady = false;
   xTimerStart(mqttReconnectTimer, 0);
 }
 
@@ -119,7 +126,6 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   }
   Serial.print("Message: ");
   Serial.println(messageTemp);
-  Serial.println(String(topic) == INIT_ACCOUNT_TOPIC);
   if(String(topic) == INIT_ACCOUNT_TOPIC){
     Serial.print("Start set data.");
     mqttInitializationDataSetter(messageTemp);
@@ -133,9 +139,18 @@ void publishMessage(String topic,String message){
   Serial.println(packetId);
 }
 
+void publishInfo(String message){
+  publishMessage(TOPIC_INFO,message);
+}
+
+void publishHeartbeat(){
+  publishMessage(TOPIC_HEARTBEAT,"{}");
+}
+
 void mqttStart(){
   mqttClient.setServer(mqttHostPtr->c_str(), mqttPortPtr->toInt());
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
+  mqttHeartbeatTimer = xTimerCreate("mqttHeartbeatTimer", pdMS_TO_TICKS(10000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(publishHeartbeat));
 
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);

@@ -27,6 +27,15 @@ String& MQTT_USERNAME = data[0];
 String& MQTT_PASSWORD = data[7];
 String& MQTT_TOPIC = data[0];
 
+void uploadInfo(){
+  String info;
+  DynamicJsonDocument jsonDoc(200);
+  jsonDoc["deviceId"] = DEVICE_ID;
+  jsonDoc["deviceName"] = DEVICE_NAME;
+  jsonDoc["owner"] = OWNER;
+  serializeJson(jsonDoc, info);
+  publishInfo(info);
+}
 
 
 //Bluetooth connect
@@ -37,9 +46,13 @@ void bluetoothListener(){
       Serial.println(message);
       String prefix = message.substring(0, 13);
       String subfix = message.substring(14);
-      String result = "UNKNOW";
+      String result = "UNKNOWN";
       if(      prefix == "DEVICE_NAME__"){
         DEVICE_NAME = subfix;
+        result = subfix;
+        saveData(data,DATA_SIZE);
+      }else if(prefix == "OWNER________"){
+        OWNER = subfix;
         result = subfix;
         saveData(data,DATA_SIZE);
       }else if(prefix == "WIFI_SSID____"){
@@ -67,9 +80,16 @@ void bluetoothListener(){
       }else if(prefix == "MQTT_INIT____"){
         mqttInitialization();
         result = "Try to init mqtt setting.";
+      }else if(prefix == "COMMIT_INIT__"){
+        saveData(data,DATA_SIZE);
+        result = "Save data.";
+      }else if(prefix == "UPLOAD_INFO__"){
+        uploadInfo();
+        result = "Try to upload info.";
       }else if(prefix == "BLUETOOTH_OFF"){
         bluetoothOff();
       }
+      
       Serial.println(result);
       serialBTSender(result);
     }

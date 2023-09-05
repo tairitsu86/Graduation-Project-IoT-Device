@@ -1,7 +1,7 @@
 #include <ArduinoJson.h>
 
-DynamicJsonDocument jsonDoc(200);
 void jsonDecode(String json,String data[],int dataSize){
+    DynamicJsonDocument jsonDoc(200);
     DeserializationError error = deserializeJson(jsonDoc, json);  
     // Check for parsing errors
     if (error) {
