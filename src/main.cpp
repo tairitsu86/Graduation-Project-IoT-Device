@@ -29,10 +29,35 @@ String& MQTT_TOPIC = data[0];
 
 void uploadInfo(){
   String info;
-  DynamicJsonDocument jsonDoc(200);
+  DynamicJsonDocument jsonDoc(1024);
   jsonDoc["deviceId"] = DEVICE_ID;
   jsonDoc["deviceName"] = DEVICE_NAME;
   jsonDoc["owner"] = OWNER;
+    // Create an array for the "functions" key
+  JsonArray functionsArray = jsonDoc.createNestedArray("functions");
+
+  // Create and add the first object in the "functions" array
+  JsonObject function1 = functionsArray.createNestedObject();
+  function1["functionId"] = 0;
+  function1["functionName"] = "light state";
+  function1["functionType"] = "STATE";
+
+  // Create and add the "parameters" array for the first function
+  JsonArray parametersArray1 = function1.createNestedArray("parameters");
+  JsonObject parameter1_1 = parametersArray1.createNestedObject();
+  parameter1_1["parameterName"] = "lightState";
+
+  // Create and add the second object in the "functions" array
+  JsonObject function2 = functionsArray.createNestedObject();
+  function2["functionId"] = 1;
+  function2["functionName"] = "light switch";
+  function2["functionType"] = "CONTROL";
+
+  // Create and add the "parameters" array for the second function
+  JsonArray parametersArray2 = function2.createNestedArray("parameters");
+  JsonObject parameter2_1 = parametersArray2.createNestedObject();
+  parameter2_1["parameterName"] = "switch";
+  parameter2_1["parameterRange"] = "[0,1]";
   serializeJson(jsonDoc, info);
   publishInfo(info);
 }
@@ -88,8 +113,10 @@ void bluetoothListener(){
         result = "Try to upload info.";
       }else if(prefix == "BLUETOOTH_OFF"){
         bluetoothOff();
+      }else if(prefix == "RESET_ALL____"){
+        formatData();
+        result = "Format finish, please restart the device.";
       }
-      
       Serial.println(result);
       serialBTSender(result);
     }
@@ -102,11 +129,15 @@ void bluetoothListener(){
 
 void setup() {
   Serial.begin(115200);
+  pinMode(26, OUTPUT);
   loadData(data,DATA_SIZE);
   setBluetoothConfig(&DEVICE_NAME);
   setWifiConfig(&WIFI_SSID, &WIFI_PASSWORD);
   setMqttConfig(&MQTT_HOST, &MQTT_PORT, &MQTT_USERNAME, &MQTT_PASSWORD, &MQTT_TOPIC);
   bluetoothOn();
+  for(int i=0;i<DATA_SIZE;i++){
+    Serial.println(String(i)+" "+data[i]);
+  }
   if(DEVICE_ID != "UNKNOWN"){
     wifiStart();
     mqttStart();

@@ -5,7 +5,6 @@
 
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
-TimerHandle_t mqttHeartbeatTimer;
 
 String* mqttHostPtr;
 String* mqttPortPtr;
@@ -36,21 +35,8 @@ void setMqttTopic(){
 }
 
 void subscribeTopic(){
-  setMqttTopic();
-  uint16_t packetIdSub;
-
-  packetIdSub = mqttClient.subscribe(TOPIC_INFO.c_str(), 2);
   Serial.print("Subscribing at QoS 2, packetId: ");
-  Serial.println(packetIdSub);
-  packetIdSub = mqttClient.subscribe(TOPIC_STATE.c_str(), 2);
-  Serial.print("Subscribing at QoS 2, packetId: ");
-  Serial.println(packetIdSub);
-  packetIdSub = mqttClient.subscribe(TOPIC_CONTROL.c_str(), 2);
-  Serial.print("Subscribing at QoS 2, packetId: ");
-  Serial.println(packetIdSub);
-  packetIdSub = mqttClient.subscribe(TOPIC_HEARTBEAT.c_str(), 2);
-  Serial.print("Subscribing at QoS 2, packetId: ");
-  Serial.println(packetIdSub);
+  Serial.println(mqttClient.subscribe(TOPIC_CONTROL.c_str(), 2));
 }
 
 void mqttInitializationDataSetter(String json){
@@ -60,6 +46,7 @@ void mqttInitializationDataSetter(String json){
   *mqttPasswordPtr = data[1];
   Serial.println(data[0]);
   Serial.println(data[1]);
+  setMqttTopic();
   isInit = false;
   mqttClient.setCredentials(mqttUsernamePtr->c_str(), mqttPasswordPtr->c_str());
   mqttClient.unsubscribe(INIT_ACCOUNT_TOPIC);
@@ -88,7 +75,6 @@ void onMqttConnect(bool sessionPresent) {
     return;
   }
   subscribeTopic();
-  xTimerStart(mqttHeartbeatTimer, 0);
   mqttReady = true;
 
 }
@@ -115,6 +101,12 @@ void onMqttUnsubscribe(uint16_t packetId) {
   Serial.println(packetId);
 }
 
+void publishMessage(String topic,String message){
+  Serial.println("Publishing data");
+  uint16_t packetId = mqttClient.publish(topic.c_str(), 1, true, message.c_str());
+  Serial.print("Publish done, packetId: ");
+  Serial.println(packetId);
+}
 
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
   Serial.println("\n Publish received.");
@@ -129,28 +121,30 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   if(String(topic) == INIT_ACCOUNT_TOPIC){
     Serial.print("Start set data.");
     mqttInitializationDataSetter(messageTemp);
+  }else if(String(topic) == TOPIC_CONTROL){
+    DynamicJsonDocument jsonDoc(200);
+    deserializeJson(jsonDoc, messageTemp);  
+    int switchValue = jsonDoc["switch"];
+    if(switchValue!=0&&switchValue!=1) return;
+    digitalWrite(26, switchValue);
+    DynamicJsonDocument jsonDoc2(200);
+    String state;
+    jsonDoc2["lightState"] = switchValue;
+    serializeJson(jsonDoc2, state);
+    publishMessage(TOPIC_STATE,state);
   }
 }
 
-void publishMessage(String topic,String message){
-  Serial.println("Publishing data");
-  uint16_t packetId = mqttClient.publish(topic.c_str(), 1, true, message.c_str());
-  Serial.print("Publish done, packetId: ");
-  Serial.println(packetId);
-}
+
 
 void publishInfo(String message){
   publishMessage(TOPIC_INFO,message);
 }
 
-void publishHeartbeat(){
-  publishMessage(TOPIC_HEARTBEAT,"{}");
-}
-
 void mqttStart(){
   mqttClient.setServer(mqttHostPtr->c_str(), mqttPortPtr->toInt());
+  Serial.println("MQTT Host: "+*mqttHostPtr+":"+*mqttPortPtr);
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
-  mqttHeartbeatTimer = xTimerCreate("mqttHeartbeatTimer", pdMS_TO_TICKS(10000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(publishHeartbeat));
 
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
