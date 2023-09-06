@@ -1,0 +1,28 @@
+{
+    "deviceId": "123456",
+    "deviceName": "TestLight",
+    "owner": "xxx",
+    "functions": [
+      {
+        "functionId": 0,
+        "functionName": "light state",
+        "functionType": "STATE",
+        "parameters": [
+          {
+            "parameterName": "lightState"
+          }
+        ]
+      },
+      {
+        "functionId": 1,
+        "functionName": "light switch",
+        "functionType": "CONTROL",
+        "parameters": [
+          {
+            "parameterName": "switch",
+            "parameterRange": "[0,1]"
+          }
+        ]
+      }
+    ]
+  }
