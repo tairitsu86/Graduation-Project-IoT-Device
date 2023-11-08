@@ -90,6 +90,7 @@ void publishInfo(){
   JsonObject function1 = functionsArray.createNestedObject();
   function1["functionId"] = 1;
   function1["functionName"] = "LCD show text";
+  function1["parameterName"] = "any string";
   function1["dataType"] = "ANY";
 
   serializeJson(jsonDoc, info);
