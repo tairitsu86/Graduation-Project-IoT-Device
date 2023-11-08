@@ -28,6 +28,3 @@ String serialBTLinstener(){
     }
     return "";
 }
-void serialBTSender(String message){
-    SerialBT.println(message);
-}

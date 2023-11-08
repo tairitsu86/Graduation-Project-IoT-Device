@@ -2,8 +2,20 @@ extern "C" {
   #include "freertos/FreeRTOS.h"
   #include "freertos/timers.h"
 }
-#include "JsonDecoder.h"
+#include <ArduinoJson.h>
 #include <AsyncMqttClient.h>
+
+//LCD setting
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_GFX.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3C ///< See datasheet for Address; 0x3C for 128x32 & 128x64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+//LCD end
+
 
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
@@ -17,9 +29,6 @@ String TOPIC_STATE = "devices/state";
 String TOPIC_CONTROL;
 
 void publishMessage(String topic,String message);
-
-
-
 
 
 void setMqttConfig(String* mqttHostPtr, String* mqttPortPtr, String* deviceId){
@@ -49,10 +58,24 @@ void publishInfo(){
 
   JsonObject state1 = statesArray.createNestedObject();
   state1["stateId"] = 1;
-  state1["stateType"] = "ACTIVE";
-  state1["dataType"] = "ANY_FLOAT";
-  state1["stateName"] = "temperature";
-  state1["valueUnit"] = "°C";
+  state1["stateType"] = "PASSIVE";
+  state1["dataType"] = "ANY";
+  state1["stateName"] = "LCD text";
+
+
+  JsonObject state2 = statesArray.createNestedObject();
+  state2["stateId"] = 2;
+  state2["stateType"] = "ACTIVE";
+  state2["dataType"] = "ANY_FLOAT";
+  state2["stateName"] = "temperature";
+  state2["valueUnit"] = "°C";
+
+  JsonObject state3 = statesArray.createNestedObject();
+  state3["stateId"] = 3;
+  state3["stateType"] = "ACTIVE";
+  state3["dataType"] = "ANY_FLOAT";
+  state3["stateName"] = "humidity";
+  state3["valueUnit"] = "%";
 
   JsonArray functionsArray = jsonDoc.createNestedArray("functions");
 
@@ -64,11 +87,14 @@ void publishInfo(){
   function0Options.add("on");
   function0Options.add("off");
 
+  JsonObject function1 = functionsArray.createNestedObject();
+  function1["functionId"] = 1;
+  function1["functionName"] = "LCD show text";
+  function1["dataType"] = "ANY";
+
   serializeJson(jsonDoc, info);
   publishMessage(TOPIC_INFO, info);
 }
-
-
 
 void connectToMqtt() {
   Serial.println("Connecting to MQTT...");
@@ -77,7 +103,6 @@ void connectToMqtt() {
 
 void onMqttConnect(bool sessionPresent) {
   Serial.println("MQTT connected.");
-  serialBTSender("MQTT connected.");
   Serial.print("Session present: ");
   Serial.println(sessionPresent);
   xTimerStop(mqttReconnectTimer, 0);
@@ -85,8 +110,6 @@ void onMqttConnect(bool sessionPresent) {
   Serial.println(mqttClient.subscribe(TOPIC_CONTROL.c_str(), 2));
   publishInfo();
 }
-
-
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   Serial.println("Disconnected from MQTT.");
@@ -127,16 +150,41 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   if(String(topic) != TOPIC_CONTROL) return; 
 
   DynamicJsonDocument jsonDoc(200);
-  //TODO
-  // deserializeJson(jsonDoc, messageTemp);  
-  // int switchValue = jsonDoc["switch"];
-  // if(switchValue!=0&&switchValue!=1) return;
-  // digitalWrite(26, switchValue);
-  // DynamicJsonDocument jsonDoc2(200);
-  // String state;
-  // jsonDoc2["lightState"] = switchValue;
-  // serializeJson(jsonDoc2, state);
-  // publishMessage(TOPIC_STATE,state);
+  DynamicJsonDocument jsonDoc2(200);
+  deserializeJson(jsonDoc, messageTemp);  
+  int functionId = jsonDoc["functionId"];
+  if(functionId==0){
+    int parameter = jsonDoc["parameter"];
+    if(parameter == 0)
+      digitalWrite(26, 1);
+    else if(parameter == 1)
+      digitalWrite(26, 0);
+    else 
+      return;
+    jsonDoc2["stateId"] = 0;
+  }else if(functionId==1){
+    String parameter = jsonDoc["parameter"].as<String>();
+    // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+    if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+      Serial.println(F("SSD1306 allocation failed"));
+      for(;;); // Don't proceed, loop forever
+    }
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE); 
+    display.setCursor(0,0);
+    display.print(parameter);
+    display.display();
+    jsonDoc2["stateId"] = 1;
+  }
+
+  
+  String state;
+  jsonDoc2["deviceId"] = jsonDoc["deviceId"];
+  jsonDoc2["stateValue"] = jsonDoc["parameter"];
+  jsonDoc2["executor"] = jsonDoc["executor"];
+  serializeJson(jsonDoc2, state);
+  publishMessage(TOPIC_STATE, state);
 }
 
 void mqttStart(){
@@ -151,6 +199,8 @@ void mqttStart(){
   mqttClient.onUnsubscribe(onMqttUnsubscribe);
   mqttClient.onMessage(onMqttMessage);
   xTimerStart(mqttReconnectTimer, 0);
-}
+
+  
+}  
 
 
