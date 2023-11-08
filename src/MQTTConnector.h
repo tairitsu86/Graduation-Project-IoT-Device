@@ -1,68 +1,79 @@
-#include "WiFiConnector.h"
+extern "C" {
+  #include "freertos/FreeRTOS.h"
+  #include "freertos/timers.h"
+}
 #include "JsonDecoder.h"
 #include <AsyncMqttClient.h>
-#define INIT_ACCOUNT_TOPIC "newAccount"
 
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 
 String* mqttHostPtr;
 String* mqttPortPtr;
-String* mqttUsernamePtr;
-String* mqttPasswordPtr;
-String* mqttTopic;
-bool isInit = false;
-bool mqttReady = false;
+String* deviceId;
 
-void setMqttConfig(String* mqttHostPtr,String* mqttPortPtr,String* mqttUsernamePtr,String* mqttPasswordPtr,String* mqttTopic){
+String TOPIC_INFO = "devices/info";
+String TOPIC_STATE = "devices/state";
+String TOPIC_CONTROL;
+
+void publishMessage(String topic,String message);
+
+
+
+
+
+void setMqttConfig(String* mqttHostPtr, String* mqttPortPtr, String* deviceId){
   ::mqttHostPtr = mqttHostPtr;
   ::mqttPortPtr = mqttPortPtr;
-  ::mqttUsernamePtr = mqttUsernamePtr;
-  ::mqttPasswordPtr = mqttPasswordPtr;
-  ::mqttTopic = mqttTopic;
+  ::deviceId = deviceId;
 }
 
-String TOPIC_INFO;
-String TOPIC_STATE;
-String TOPIC_CONTROL;
-String TOPIC_HEARTBEAT;
+void publishInfo(){
+  String info;
+  DynamicJsonDocument jsonDoc(1024);
 
-void setMqttTopic(){
-  TOPIC_INFO = "devices/"+*mqttTopic+"/info";
-  TOPIC_STATE = "devices/"+*mqttTopic+"/state";
-  TOPIC_CONTROL = "devices/"+*mqttTopic+"/control";
-  TOPIC_HEARTBEAT = "devices/"+*mqttTopic+"/heartbeat";
+  jsonDoc["deviceId"] = *deviceId;
+  jsonDoc["deviceName"] = "test device";
+  jsonDoc["description"] = "This is a test device, made by ESP32!";
+  jsonDoc["owner"] = "OAO";
+
+  JsonArray statesArray = jsonDoc.createNestedArray("states");
+  JsonObject state0 = statesArray.createNestedObject();
+  state0["stateId"] = 0;
+  state0["stateType"] = "PASSIVE";
+  state0["dataType"] = "OPTIONS";
+  state0["stateName"] = "light power";
+  JsonArray state0Options = state0.createNestedArray("stateOptions");
+  state0Options.add("on");
+  state0Options.add("off");
+
+  JsonObject state1 = statesArray.createNestedObject();
+  state1["stateId"] = 1;
+  state1["stateType"] = "ACTIVE";
+  state1["dataType"] = "ANY_FLOAT";
+  state1["stateName"] = "temperature";
+  state1["valueUnit"] = "°C";
+
+  JsonArray functionsArray = jsonDoc.createNestedArray("functions");
+
+  JsonObject function0 = functionsArray.createNestedObject();
+  function0["functionId"] = 0;
+  function0["functionName"] = "light switch";
+  function0["dataType"] = "OPTIONS";
+  JsonArray function0Options = function0.createNestedArray("functionOptions");
+  function0Options.add("on");
+  function0Options.add("off");
+
+  serializeJson(jsonDoc, info);
+  publishMessage(TOPIC_INFO, info);
 }
 
-void subscribeTopic(){
-  Serial.print("Subscribing at QoS 2, packetId: ");
-  Serial.println(mqttClient.subscribe(TOPIC_CONTROL.c_str(), 2));
-}
 
-void mqttInitializationDataSetter(String json){
-  String data[] = {"username","password"};
-  jsonDecode(json,data,2);
-  *mqttUsernamePtr = data[0];
-  *mqttPasswordPtr = data[1];
-  Serial.println(data[0]);
-  Serial.println(data[1]);
-  setMqttTopic();
-  isInit = false;
-  mqttClient.setCredentials(mqttUsernamePtr->c_str(), mqttPasswordPtr->c_str());
-  mqttClient.unsubscribe(INIT_ACCOUNT_TOPIC);
-  mqttClient.disconnect();
-}
 
 void connectToMqtt() {
-  if(!WiFi.isConnected()){
-    Serial.println("WiFi connect fail, skip connect mqtt step.");
-    return;
-  }
   Serial.println("Connecting to MQTT...");
   mqttClient.connect();
-  
 }
-
 
 void onMqttConnect(bool sessionPresent) {
   Serial.println("MQTT connected.");
@@ -70,20 +81,15 @@ void onMqttConnect(bool sessionPresent) {
   Serial.print("Session present: ");
   Serial.println(sessionPresent);
   xTimerStop(mqttReconnectTimer, 0);
-  if(isInit){
-    Serial.println(mqttClient.subscribe(INIT_ACCOUNT_TOPIC, 2));
-    return;
-  }
-  subscribeTopic();
-  mqttReady = true;
-
+  Serial.print("Subscribing at QoS 2, packetId: ");
+  Serial.println(mqttClient.subscribe(TOPIC_CONTROL.c_str(), 2));
+  publishInfo();
 }
 
 
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   Serial.println("Disconnected from MQTT.");
-  mqttReady = false;
   xTimerStart(mqttReconnectTimer, 0);
 }
 
@@ -118,30 +124,23 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
   }
   Serial.print("Message: ");
   Serial.println(messageTemp);
-  if(String(topic) == INIT_ACCOUNT_TOPIC){
-    Serial.print("Start set data.");
-    mqttInitializationDataSetter(messageTemp);
-  }else if(String(topic) == TOPIC_CONTROL){
-    DynamicJsonDocument jsonDoc(200);
-    deserializeJson(jsonDoc, messageTemp);  
-    int switchValue = jsonDoc["switch"];
-    if(switchValue!=0&&switchValue!=1) return;
-    digitalWrite(26, switchValue);
-    DynamicJsonDocument jsonDoc2(200);
-    String state;
-    jsonDoc2["lightState"] = switchValue;
-    serializeJson(jsonDoc2, state);
-    publishMessage(TOPIC_STATE,state);
-  }
-}
+  if(String(topic) != TOPIC_CONTROL) return; 
 
-
-
-void publishInfo(String message){
-  publishMessage(TOPIC_INFO,message);
+  DynamicJsonDocument jsonDoc(200);
+  //TODO
+  // deserializeJson(jsonDoc, messageTemp);  
+  // int switchValue = jsonDoc["switch"];
+  // if(switchValue!=0&&switchValue!=1) return;
+  // digitalWrite(26, switchValue);
+  // DynamicJsonDocument jsonDoc2(200);
+  // String state;
+  // jsonDoc2["lightState"] = switchValue;
+  // serializeJson(jsonDoc2, state);
+  // publishMessage(TOPIC_STATE,state);
 }
 
 void mqttStart(){
+  TOPIC_CONTROL = "devices/"+*deviceId+"/control";
   mqttClient.setServer(mqttHostPtr->c_str(), mqttPortPtr->toInt());
   Serial.println("MQTT Host: "+*mqttHostPtr+":"+*mqttPortPtr);
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectToMqtt));
@@ -153,13 +152,5 @@ void mqttStart(){
   mqttClient.onMessage(onMqttMessage);
   xTimerStart(mqttReconnectTimer, 0);
 }
-
-void mqttInitialization(){
-  isInit = true;
-  Serial.println("Init MQTT...");
-  mqttClient.setCredentials("", "");
-  mqttStart();
-}
-
 
 
